@@ -1,1 +1,1 @@
-# netflix-graphql-gateway-
+# netflix-graphql-gateway
