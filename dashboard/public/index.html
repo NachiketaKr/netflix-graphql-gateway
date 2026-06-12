@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Netflix GraphQL Gateway — Analytics Dashboard</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --surface2: #1f1f1f;
+    --border: #2a2a2a;
+    --red: #e50914;
+    --red-dim: #8b060d;
+    --green: #46d369;
+    --amber: #f5a623;
+    --text: #e5e5e5;
+    --muted: #999;
+    --blue: #4fa3e8;
+    --purple: #9b59b6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 14px; }
+
+  /* Header */
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; gap: 1rem; height: 56px; }
+  .logo { color: var(--red); font-size: 1.4rem; font-weight: 700; letter-spacing: -0.5px; }
+  .logo span { color: var(--text); font-weight: 300; font-size: 1rem; margin-left: 8px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-left: auto; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+  .status-label { font-size: 12px; color: var(--muted); }
+
+  /* Nav */
+  nav { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; gap: 0; padding: 0 2rem; }
+  nav button { background: none; border: none; color: var(--muted); padding: 12px 16px; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; transition: all .15s; }
+  nav button.active { color: var(--text); border-bottom-color: var(--red); }
+  nav button:hover { color: var(--text); }
+
+  /* Main */
+  .main { padding: 1.5rem 2rem; max-width: 1400px; }
+
+  /* Cards */
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; }
+  .card-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .5rem; }
+  .card-value { font-size: 2rem; font-weight: 300; }
+  .card-sub { font-size: 12px; color: var(--muted); margin-top: .25rem; }
+
+  /* Section headers */
+  .section-title { font-size: 15px; font-weight: 500; margin-bottom: 1rem; display: flex; align-items: center; gap: .5rem; }
+  .section-title .badge { font-size: 11px; background: var(--surface2); color: var(--muted); padding: 2px 8px; border-radius: 12px; font-weight: 400; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 8px 12px; border-bottom: 1px solid var(--border); font-weight: 400; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .field-name { font-family: 'Courier New', monospace; color: var(--blue); font-size: 12px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+  .pill-green { background: rgba(70,211,105,.15); color: var(--green); }
+  .pill-red { background: rgba(229,9,20,.15); color: #ff6b6b; }
+  .pill-amber { background: rgba(245,166,35,.15); color: var(--amber); }
+  .pill-muted { background: var(--surface2); color: var(--muted); }
+  .bar-wrap { background: var(--surface2); border-radius: 3px; height: 6px; min-width: 60px; }
+  .bar { height: 6px; border-radius: 3px; background: var(--blue); }
+
+  /* Subgraph health */
+  .sg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .sg-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; }
+  .sg-name { font-size: 13px; font-weight: 500; margin-bottom: .25rem; }
+  .sg-url { font-size: 11px; color: var(--muted); font-family: monospace; margin-bottom: .75rem; }
+  .sg-status { font-size: 12px; display: flex; align-items: center; gap: 6px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .dot-green { background: var(--green); }
+  .dot-red { background: var(--red); }
+  .dot-amber { background: var(--amber); }
+
+  /* Query playground */
+  .playground { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .pane { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .pane-header { background: var(--surface2); padding: 8px 12px; font-size: 12px; color: var(--muted); display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+  textarea { width: 100%; background: var(--surface); color: var(--text); border: none; padding: 1rem; font-family: 'Courier New', monospace; font-size: 12px; resize: vertical; min-height: 200px; outline: none; }
+  .result-box { padding: 1rem; font-family: 'Courier New', monospace; font-size: 12px; white-space: pre-wrap; min-height: 240px; max-height: 400px; overflow-y: auto; color: var(--green); }
+  .run-btn { background: var(--red); color: white; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; }
+  .run-btn:hover { background: #f40612; }
+  .run-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .sample-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+  .sample-btn:hover { color: var(--text); border-color: var(--muted); }
+  .samples { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: .75rem; }
+
+  /* Deprecation candidates */
+  .depr-list { display: flex; flex-direction: column; gap: .5rem; }
+  .depr-item { background: var(--surface2); border: 1px solid var(--border); border-left: 3px solid var(--amber); border-radius: 6px; padding: .75rem 1rem; display: flex; align-items: center; gap: 1rem; }
+  .depr-field { font-family: monospace; color: var(--amber); font-size: 12px; flex: 1; }
+  .depr-reason { font-size: 11px; color: var(--muted); }
+
+  /* Hidden */
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Refresh bar */
+  .toolbar { display: flex; align-items: center; gap: .75rem; margin-bottom: 1.25rem; }
+  .refresh-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .refresh-btn:hover { border-color: var(--muted); }
+  .last-refresh { font-size: 11px; color: var(--muted); margin-left: auto; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">NETFLIX <span>GraphQL Analytics</span></div>
+  <div class="status-label">Gateway Live</div>
+  <div class="status-dot" id="gatewayDot"></div>
+</div>
+
+<nav>
+  <button class="active" onclick="switchTab('overview')">Overview</button>
+  <button onclick="switchTab('fields')">Field Analytics</button>
+  <button onclick="switchTab('subgraphs')">Subgraphs</button>
+  <button onclick="switchTab('playground')">Query Playground</button>
+</nav>
+
+<div class="main">
+
+  <!-- OVERVIEW -->
+  <div class="tab-panel active" id="tab-overview">
+    <div class="toolbar">
+      <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+      <span class="last-refresh" id="lastRefresh"></span>
+    </div>
+
+    <div class="grid-4" id="metricCards">
+      <div class="card"><div class="card-title">Total Field Calls</div><div class="card-value" id="m-total">—</div><div class="card-sub">since last restart</div></div>
+      <div class="card"><div class="card-title">Unique Fields</div><div class="card-value" id="m-fields">—</div><div class="card-sub">across all subgraphs</div></div>
+      <div class="card"><div class="card-title">Deprecation Candidates</div><div class="card-value" id="m-depr" style="color:var(--amber)">—</div><div class="card-sub">zero-usage fields</div></div>
+      <div class="card"><div class="card-title">Error-Prone Fields</div><div class="card-value" id="m-err" style="color:#ff6b6b">—</div><div class="card-sub">&gt;5% error rate</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="section-title">Top Fields by Usage</div>
+        <table>
+          <thead><tr><th>Field</th><th>Calls</th><th>Avg ms</th><th>Usage</th></tr></thead>
+          <tbody id="topFieldsTable"><tr><td colspan="4" style="color:var(--muted);text-align:center">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="section-title">Deprecation Candidates <span class="badge">safe to remove</span></div>
+        <div class="depr-list" id="deprList"><div style="color:var(--muted);font-size:13px">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FIELD ANALYTICS -->
+  <div class="tab-panel" id="tab-fields">
+    <div class="toolbar">
+      <button class="refresh-btn" onclick="loadFields()">↻ Refresh</button>
+      <input id="fieldFilter" placeholder="Filter fields…" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;font-size:12px;width:220px;outline:none;">
+      <span class="last-refresh" id="lastRefreshFields"></span>
+    </div>
+    <div class="card">
+      <div class="section-title">All Field Usage</div>
+      <table>
+        <thead><tr><th>Field</th><th>Calls</th><th>Errors</th><th>Error Rate</th><th>Avg Latency</th><th>Clients</th><th>Status</th></tr></thead>
+        <tbody id="allFieldsTable"><tr><td colspan="7" style="color:var(--muted);text-align:center">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SUBGRAPHS -->
+  <div class="tab-panel" id="tab-subgraphs">
+    <div class="toolbar">
+      <button class="refresh-btn" onclick="loadHealth()">↻ Refresh</button>
+    </div>
+    <div class="section-title" style="margin-bottom:1rem">Subgraph Health</div>
+    <div class="sg-grid" id="sgGrid">
+      <div class="sg-card"><div class="sg-name">Loading…</div></div>
+    </div>
+    <div style="margin-top:1.5rem" class="card">
+      <div class="section-title">Federation Architecture</div>
+      <div style="padding:.5rem 0;color:var(--muted);font-size:13px;line-height:2;">
+        <div>📡 <strong style="color:var(--text)">Gateway</strong> :4000 — composes all subgraphs, propagates OTel trace context</div>
+        <div style="margin-left:1.5rem">├── 👤 <strong style="color:var(--blue)">Users</strong> :4001 — owns <code style="color:var(--blue)">User</code>, <code style="color:var(--blue)">Profile</code> entities</div>
+        <div style="margin-left:1.5rem">├── 🎬 <strong style="color:var(--green)">Content</strong> :4002 — owns <code style="color:var(--green)">Title</code>, extends <code style="color:var(--green)">User.watchHistory</code></div>
+        <div style="margin-left:1.5rem">└── 💳 <strong style="color:var(--amber)">Billing</strong> :4003 — owns <code style="color:var(--amber)">Subscription</code>, extends <code style="color:var(--amber)">User.subscription</code></div>
+        <div style="margin-top:1rem">🔭 <strong style="color:var(--text)">Jaeger</strong> :16686 — distributed traces (OTel → OTLP HTTP → Jaeger)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLAYGROUND -->
+  <div class="tab-panel" id="tab-playground">
+    <div class="section-title">Query Playground</div>
+    <div class="samples">
+      <button class="sample-btn" onclick="loadSample('crossDomain')">Cross-domain (users + content + billing)</button>
+      <button class="sample-btn" onclick="loadSample('titles')">Browse titles</button>
+      <button class="sample-btn" onclick="loadSample('search')">Search</button>
+      <button class="sample-btn" onclick="loadSample('trending')">Trending</button>
+    </div>
+    <div class="playground">
+      <div class="pane">
+        <div class="pane-header">
+          <span>Query</span>
+          <button class="run-btn" id="runBtn" onclick="runQuery()">▶ Run</button>
+        </div>
+        <textarea id="queryInput" spellcheck="false"></textarea>
+        <div style="padding:.5rem 1rem;border-top:1px solid var(--border);">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:.25rem">x-client-name header</div>
+          <input id="clientName" value="dashboard" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:12px;width:180px;outline:none;">
+        </div>
+      </div>
+      <div class="pane">
+        <div class="pane-header"><span>Response</span><span id="queryTime" style="font-size:11px;color:var(--muted)"></span></div>
+        <div class="result-box" id="resultBox">// Run a query to see the response…</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const SAMPLES = {
+  crossDomain: `# Cross-domain query — gateway stitches users + content + billing
+# This is exactly what Netflix's federated supergraph enables:
+# one query, three subgraphs, zero client complexity.
+query GetMemberDashboard {
+  user(id: "u1") {
+    id
+    name
+    email
+    plan
+    # From content-subgraph (User extension)
+    watchHistory {
+      title { title genre rating }
+      progressPercent
+      lastWatchedAt
+    }
+    continueWatching {
+      title { title thumbnailUrl }
+      progressPercent
+    }
+    recommendations {
+      id title genre rating
+    }
+    # From billing-subgraph (User extension)
+    subscription {
+      plan status priceUsd nextBillingDate
+      paymentMethod { brand last4 }
+    }
+    billingHealth {
+      isHealthy issues
+    }
+  }
+}`,
+  titles: `query BrowseTitles {
+  titles(genre: DRAMA) {
+    id title year rating
+    type maturityRating
+    description
+  }
+}`,
+  search: `query Search {
+  search(query: "stranger") {
+    id title year rating genre
+    description
+  }
+}`,
+  trending: `query Trending {
+  trending {
+    id title rating genre type
+    thumbnailUrl
+  }
+}`,
+};
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'fields') loadFields();
+  if (name === 'subgraphs') loadHealth();
+}
+
+function loadSample(name) {
+  document.getElementById('queryInput').value = SAMPLES[name];
+  document.getElementById('resultBox').textContent = '// Run a query to see the response…';
+  document.getElementById('queryTime').textContent = '';
+}
+
+async function loadAll() {
+  await Promise.all([loadFields(), loadHealth()]);
+}
+
+async function loadFields() {
+  try {
+    const r = await fetch('/api/analytics/fields');
+    const data = await r.json();
+    renderOverview(data);
+    renderFieldsTable(data.fields || []);
+    const now = new Date().toLocaleTimeString();
+    document.getElementById('lastRefresh').textContent = `Last refreshed: ${now}`;
+    document.getElementById('lastRefreshFields').textContent = `Last refreshed: ${now}`;
+  } catch(e) {
+    console.error('Fields load failed:', e);
+  }
+}
+
+function renderOverview(data) {
+  const s = data.summary || {};
+  document.getElementById('m-total').textContent = (s.totalCalls || 0).toLocaleString();
+  document.getElementById('m-fields').textContent = data.totalFields || 0;
+  document.getElementById('m-depr').textContent = (s.deprecationCandidates || []).length;
+  document.getElementById('m-err').textContent = (s.errorProne || []).length;
+
+  const top = (data.fields || []).slice(0, 5);
+  const maxCalls = top[0]?.calls || 1;
+  document.getElementById('topFieldsTable').innerHTML = top.length ? top.map(f => `
+    <tr>
+      <td class="field-name">${f.field}</td>
+      <td>${f.calls.toLocaleString()}</td>
+      <td>${f.avgLatencyMs}ms</td>
+      <td><div class="bar-wrap"><div class="bar" style="width:${Math.round(f.calls/maxCalls*100)}%"></div></div></td>
+    </tr>`).join('') : '<tr><td colspan="4" style="color:var(--muted);text-align:center">No data yet — run some queries!</td></tr>';
+
+  const cands = s.deprecationCandidates || [];
+  document.getElementById('deprList').innerHTML = cands.length
+    ? cands.map(f => `<div class="depr-item"><span class="depr-field">${f}</span><span class="depr-reason">0 calls recorded</span><span class="pill pill-amber">candidate</span></div>`).join('')
+    : '<div style="color:var(--muted);font-size:13px">No deprecation candidates — all fields are in use ✓</div>';
+}
+
+function renderFieldsTable(fields) {
+  const filter = (document.getElementById('fieldFilter')?.value || '').toLowerCase();
+  const filtered = fields.filter(f => f.field.toLowerCase().includes(filter));
+
+  document.getElementById('allFieldsTable').innerHTML = filtered.length ? filtered.map(f => {
+    const errPct = parseFloat(f.errorRate);
+    const errPill = errPct > 5 ? 'pill-red' : errPct > 0 ? 'pill-amber' : 'pill-green';
+    const status = f.deprecationCandidate
+      ? '<span class="pill pill-amber">deprecated?</span>'
+      : f.calls > 50 ? '<span class="pill pill-green">popular</span>'
+      : '<span class="pill pill-muted">normal</span>';
+    return `<tr>
+      <td class="field-name">${f.field}</td>
+      <td>${f.calls.toLocaleString()}</td>
+      <td>${f.errors}</td>
+      <td><span class="pill ${errPill}">${f.errorRate}</span></td>
+      <td>${f.avgLatencyMs}ms</td>
+      <td style="font-size:11px;color:var(--muted)">${f.clients.join(', ') || '—'}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="7" style="color:var(--muted);text-align:center">No fields match filter</td></tr>';
+}
+
+document.addEventListener('input', e => {
+  if (e.target.id === 'fieldFilter') renderFieldsTable(window._lastFields || []);
+});
+
+async function loadHealth() {
+  try {
+    const r = await fetch('/api/health/subgraphs');
+    const data = await r.json();
+    const colors = { users: 'var(--blue)', content: 'var(--green)', billing: 'var(--amber)' };
+    const icons = { users: '👤', content: '🎬', billing: '💳' };
+    const ports = { users: '4001', content: '4002', billing: '4003' };
+
+    document.getElementById('sgGrid').innerHTML = (data.subgraphs || []).map(sg => `
+      <div class="sg-card" style="border-left: 3px solid ${colors[sg.name] || 'var(--muted)'}">
+        <div class="sg-name">${icons[sg.name] || ''} ${sg.name.charAt(0).toUpperCase() + sg.name.slice(1)} Subgraph</div>
+        <div class="sg-url">localhost:${ports[sg.name]}/graphql</div>
+        <div class="sg-status">
+          <div class="dot ${sg.status === 'healthy' ? 'dot-green' : 'dot-red'}"></div>
+          <span style="color: ${sg.status === 'healthy' ? 'var(--green)' : 'var(--red)'}">${sg.status}</span>
+          ${sg.error ? `<span style="color:var(--muted);font-size:11px;margin-left:4px">${sg.error}</span>` : ''}
+        </div>
+      </div>`).join('');
+    document.getElementById('gatewayDot').style.background = data.allHealthy ? 'var(--green)' : 'var(--amber)';
+  } catch(e) {
+    document.getElementById('sgGrid').innerHTML = '<div class="sg-card" style="color:var(--red)">Could not reach gateway</div>';
+    document.getElementById('gatewayDot').style.background = 'var(--red)';
+  }
+}
+
+async function runQuery() {
+  const query = document.getElementById('queryInput').value.trim();
+  if (!query) return;
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.textContent = '…';
+  const box = document.getElementById('resultBox');
+  box.style.color = 'var(--muted)';
+  box.textContent = 'Running…';
+  const start = Date.now();
+  try {
+    const clientName = document.getElementById('clientName').value || 'dashboard';
+    const r = await fetch('/api/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-client-name': clientName },
+      body: JSON.stringify({ query }),
+    });
+    const data = await r.json();
+    const ms = Date.now() - start;
+    document.getElementById('queryTime').textContent = `${ms}ms`;
+    box.style.color = data.errors ? 'var(--red)' : 'var(--green)';
+    box.textContent = JSON.stringify(data, null, 2);
+    // Refresh field analytics after query
+    setTimeout(loadFields, 500);
+  } catch(e) {
+    box.style.color = 'var(--red)';
+    box.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Run';
+  }
+}
+
+// Init
+loadSample('crossDomain');
+loadAll();
+setInterval(loadFields, 15000);
+</script>
+</body>
+</html>

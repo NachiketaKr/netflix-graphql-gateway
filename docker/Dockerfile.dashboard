@@ -1,0 +1,14 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Dashboard only needs express + cors
+COPY dashboard/package.json ./package.json
+RUN npm install --production --legacy-peer-deps
+
+COPY dashboard/server.js ./server.js
+COPY dashboard/public/ ./public/
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]

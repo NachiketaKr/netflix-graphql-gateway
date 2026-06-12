@@ -1,0 +1,23 @@
+{
+  "name": "netflix-graphql-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Federated GraphQL Gateway inspired by Netflix Studio Edge — 3 subgraphs, OpenTelemetry tracing, field-level analytics",
+  "workspaces": [
+    "gateway",
+    "subgraphs/users",
+    "subgraphs/content",
+    "subgraphs/billing",
+    "dashboard"
+  ],
+  "scripts": {
+    "install:all": "npm install",
+    "start": "concurrently \"npm run start --workspace=subgraphs/users\" \"npm run start --workspace=subgraphs/content\" \"npm run start --workspace=subgraphs/billing\" \"npm run start --workspace=gateway\" \"npm run start --workspace=dashboard\"",
+    "dev": "concurrently --names \"users,content,billing,gateway,dashboard\" --prefix-colors \"blue,green,yellow,magenta,cyan\" \"npm run dev --workspace=subgraphs/users\" \"npm run dev --workspace=subgraphs/content\" \"npm run dev --workspace=subgraphs/billing\" \"npm run dev --workspace=gateway\" \"npm run dev --workspace=dashboard\"",
+    "docker:up": "docker-compose -f docker/docker-compose.yml up -d",
+    "docker:down": "docker-compose -f docker/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

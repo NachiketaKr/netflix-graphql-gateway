@@ -1,0 +1,156 @@
+# Sample GraphQL Queries
+# Copy-paste these into the dashboard playground or any GraphQL client
+# pointing at http://localhost:4000/graphql
+
+# ──────────────────────────────────────────────────────────────────
+# 1. CROSS-DOMAIN QUERY — the flagship federation feature
+#    Gateway stitches users + content + billing in one request
+# ──────────────────────────────────────────────────────────────────
+query GetMemberDashboard {
+  user(id: "u1") {
+    id
+    name
+    email
+    plan
+    memberSince
+
+    profiles {
+      id
+      name
+      maturityRating
+    }
+
+    # Resolved by content-subgraph
+    watchHistory {
+      title {
+        title
+        genre
+        rating
+        type
+      }
+      progressPercent
+      lastWatchedAt
+    }
+
+    continueWatching {
+      title { title thumbnailUrl }
+      progressPercent
+    }
+
+    recommendations {
+      id
+      title
+      genre
+      rating
+      year
+    }
+
+    # Resolved by billing-subgraph
+    subscription {
+      plan
+      status
+      priceUsd
+      nextBillingDate
+      paymentMethod {
+        brand
+        last4
+        expiryMonth
+        expiryYear
+      }
+    }
+
+    billingHealth {
+      isHealthy
+      issues
+    }
+
+    invoices {
+      id
+      amount
+      status
+      date
+      description
+    }
+  }
+}
+
+# ──────────────────────────────────────────────────────────────────
+# 2. CONTENT — browse and search titles
+# ──────────────────────────────────────────────────────────────────
+query BrowseContent {
+  trending {
+    id title rating genre type year
+    description thumbnailUrl
+  }
+}
+
+query FilterByGenre {
+  titles(genre: DRAMA, type: SERIES) {
+    id title year rating seasons
+  }
+}
+
+query SearchTitles {
+  search(query: "stranger") {
+    id title genre rating year
+    description
+  }
+}
+
+# ──────────────────────────────────────────────────────────────────
+# 3. ALL USERS (admin view)
+# ──────────────────────────────────────────────────────────────────
+query AllUsers {
+  users {
+    id
+    name
+    email
+    plan
+    country
+    profiles { id name maturityRating }
+    subscription { status priceUsd }
+    billingHealth { isHealthy issues }
+  }
+}
+
+# ──────────────────────────────────────────────────────────────────
+# 4. MUTATIONS
+# ──────────────────────────────────────────────────────────────────
+mutation UpdateProfile {
+  updateProfile(profileId: "p1", name: "Alice (Updated)") {
+    id
+    name
+  }
+}
+
+mutation CancelSubscription {
+  cancelSubscription(userId: "u2") {
+    id
+    status
+    plan
+  }
+}
+
+mutation RetryFailedPayment {
+  retryPayment(invoiceId: "inv5") {
+    id
+    status
+    amount
+  }
+}
+
+# ──────────────────────────────────────────────────────────────────
+# 5. INTROSPECTION — see the full composed schema
+# ──────────────────────────────────────────────────────────────────
+query IntrospectSchema {
+  __schema {
+    types {
+      name
+      kind
+      fields {
+        name
+        type { name kind }
+      }
+    }
+  }
+}

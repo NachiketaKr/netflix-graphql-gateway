@@ -1,0 +1,123 @@
+# Netflix-inspired federated GraphQL gateway stack
+# Jaeger: distributed tracing (OTel OTLP HTTP, Zipkin-compatible)
+
+services:
+
+  # ── Distributed Tracing ─────────────────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.54
+    container_name: jaeger
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "4318:4318" # OTLP HTTP  ← services export here
+      - "9411:9411" # Zipkin-compatible endpoint
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+    restart: unless-stopped
+    networks:
+      - graphql-net
+
+  # ── Users Subgraph ──────────────────────────────────────────────
+  users-subgraph:
+    build:
+      context: .. # repo root — all COPY paths resolve from here
+      dockerfile: docker/Dockerfile.subgraph
+      args:
+        SERVICE_DIR: subgraphs/users
+    container_name: users-subgraph
+    ports:
+      - "4001:4001"
+    environment:
+      - PORT=4001
+      - NODE_ENV=production
+      - OTLP_ENDPOINT=http://jaeger:4318
+    depends_on:
+      - jaeger
+    restart: unless-stopped
+    networks:
+      - graphql-net
+
+  # ── Content Subgraph ────────────────────────────────────────────
+  content-subgraph:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.subgraph
+      args:
+        SERVICE_DIR: subgraphs/content
+    container_name: content-subgraph
+    ports:
+      - "4002:4002"
+    environment:
+      - PORT=4002
+      - NODE_ENV=production
+      - OTLP_ENDPOINT=http://jaeger:4318
+    depends_on:
+      - jaeger
+    restart: unless-stopped
+    networks:
+      - graphql-net
+
+  # ── Billing Subgraph ────────────────────────────────────────────
+  billing-subgraph:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.subgraph
+      args:
+        SERVICE_DIR: subgraphs/billing
+    container_name: billing-subgraph
+    ports:
+      - "4003:4003"
+    environment:
+      - PORT=4003
+      - NODE_ENV=production
+      - OTLP_ENDPOINT=http://jaeger:4318
+    depends_on:
+      - jaeger
+    restart: unless-stopped
+    networks:
+      - graphql-net
+
+  # ── GraphQL Gateway ─────────────────────────────────────────────
+  gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gateway
+    container_name: graphql-gateway
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - NODE_ENV=production
+      - OTLP_ENDPOINT=http://jaeger:4318
+      - USERS_URL=http://users-subgraph:4001/graphql
+      - CONTENT_URL=http://content-subgraph:4002/graphql
+      - BILLING_URL=http://billing-subgraph:4003/graphql
+    depends_on:
+      - users-subgraph
+      - content-subgraph
+      - billing-subgraph
+      - jaeger
+    restart: unless-stopped
+    networks:
+      - graphql-net
+
+  # ── Analytics Dashboard ─────────────────────────────────────────
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboard
+    container_name: analytics-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - GATEWAY_URL=http://gateway:4000
+    depends_on:
+      - gateway
+    restart: unless-stopped
+    networks:
+      - graphql-net
+
+networks:
+  graphql-net:
+    driver: bridge

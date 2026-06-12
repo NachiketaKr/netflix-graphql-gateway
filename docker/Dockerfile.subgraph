@@ -1,0 +1,20 @@
+FROM node:20-alpine
+
+ARG SERVICE_DIR
+# Make SERVICE_DIR available at runtime via ENV
+ENV SERVICE_DIR=${SERVICE_DIR}
+
+WORKDIR /app
+
+# Single consolidated install — all subgraph + observability deps in one shot
+COPY docker/package.json ./package.json
+RUN npm install --production --legacy-peer-deps
+
+# Shared observability helpers
+COPY observability/ ./observability/
+
+# The specific subgraph's source
+COPY ${SERVICE_DIR}/index.js ./${SERVICE_DIR}/index.js
+
+# Shell form so $SERVICE_DIR env var expands at runtime
+CMD node $SERVICE_DIR/index.js
